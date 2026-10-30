@@ -191,7 +191,32 @@ case "ondevice":
     print("[D] full on-device pipeline (Apple Vision detector)")
     let t3 = Date()
     let r = try client.run(reader: reader, options: opts) { print("  progress: \($0)") }
-    print(String(format: "  run %.1f s %@", Date().timeIntervalSince(t3), r.timings.description))
+    let totalSeconds = Date().timeIntervalSince(t3)
+    print(String(format: "  run %.1f s %@", totalSeconds, r.timings.description))
+    if let exportPath = ProcessInfo.processInfo.environment["GEMX_EXPORT_DIR"] {
+        let dir = URL(fileURLWithPath: exportPath)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        func saveFloats(_ name: String, _ data: [Float]) throws {
+            try data.withUnsafeBufferPointer { Data(buffer: $0) }.write(to: dir.appendingPathComponent(name + ".f32"))
+        }
+        try saveFloats("kp2d", r.kp2d)
+        try saveFloats("bbx_xys", r.bbxXys)
+        try saveFloats("pred_x", r.predX)
+        try saveFloats("pred_cam", r.predCam)
+        try saveFloats("joints", r.joints77.map(Float.init))
+        try saveFloats("joints_incam", r.jointsIncam.map(Float.init))
+        let info: [String: Any] = ["total_seconds": totalSeconds, "timings": r.timings,
+            "pose_load_seconds": r.poseLoadSeconds, "sampled_frames": r.sampledFrames,
+            "frames": r.motion.frames.count, "fps": 1 / r.motion.frameTime,
+            "width": reader.info.width, "height": reader.info.height,
+            "step": opts.sampleStep, "flip": opts.flipTest, "tier": opts.tier.rawValue,
+            "pose_compute": opts.poseCompute.rawValue,
+            "system": ProcessInfo.processInfo.operatingSystemVersionString,
+            "thermal_state": ProcessInfo.processInfo.thermalState.rawValue,
+            "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled]
+        try JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted, .sortedKeys])
+            .write(to: dir.appendingPathComponent("run.json"))
+    }
     print("  frames=\(r.motion.frames.count) frameTime=\(r.motion.frameTime)")
     if let oracleDir {
         let bb = try oracle("bbx_xys")
@@ -301,6 +326,39 @@ case "vitpose-crop":
     let hm = try client.runVitPoseOnCrop(crop)
     try hm.withUnsafeBufferPointer { Data(buffer: $0) }.write(to: URL(fileURLWithPath: args[4]))
     print("heatmap floats:", hm.count)
+
+case "prepare-pose":
+    guard args.count >= 6 else { die("prepare-pose VIDEO MODELS OUTPUT STEP [MAX_CROPS]") }
+    let reader = try await GemxVideoReader(url: URL(fileURLWithPath: args[2]), maxSide: 1080)
+    let client = try OnDeviceGemxClient(modelsDirectory: URL(fileURLWithPath: args[3]))
+    let dir = URL(fileURLWithPath: args[4])
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let step = Int(args[5])!
+    let (n, indices, boxes) = try client.detectBoxes(reader: reader, step: step, onProgress: nil)
+    let limit = args.count > 6 ? Int(args[6])! : indices.count
+    let chosen = Set(stride(from: 0, to: indices.count, by: max(1, indices.count / max(1, limit))).prefix(limit))
+    let wanted = Set(chosen.map { indices[$0] })
+    let lookup = Dictionary(uniqueKeysWithValues: indices.enumerated().map { ($0.element, $0.offset) })
+    var selected: [Int] = []
+    var selectedBoxes: [Float] = []
+    let cropURL = dir.appendingPathComponent("crops.f32")
+    FileManager.default.createFile(atPath: cropURL.path, contents: nil)
+    let handle = try FileHandle(forWritingTo: cropURL)
+    defer { try? handle.close() }
+    try reader.forEachFrame(wanted: { wanted.contains($0) }) { f in
+        guard wanted.contains(f.index), let k = lookup[f.index] else { return true }
+        var crop = [Float](repeating: 0, count: 3 * 256 * 192)
+        crop.withUnsafeMutableBufferPointer { GemxPipeline.cropForVitPose(frame: f, box: boxes[k], into: $0.baseAddress!) }
+        try crop.withUnsafeBufferPointer { try handle.write(contentsOf: Data(buffer: $0)) }
+        selected.append(f.index)
+        selectedBoxes += [boxes[k].x, boxes[k].y, boxes[k].z]
+        return true
+    }
+    try selectedBoxes.withUnsafeBufferPointer { Data(buffer: $0) }.write(to: dir.appendingPathComponent("boxes.f32"))
+    let info: [String: Any] = ["video_frames": n, "indices": selected, "width": reader.info.width,
+                              "height": reader.info.height, "fps": reader.info.fps, "step": step]
+    try JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted, .sortedKeys]).write(to: dir.appendingPathComponent("input.json"))
+    print("prepared \(selected.count) exact app crops from \(n) frames")
 
 case "dump-frame":
 

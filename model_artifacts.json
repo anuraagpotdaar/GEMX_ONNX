@@ -1,0 +1,16 @@
+{
+  "W8": {
+    "package": "quant/vitpose_w8.mlpackage",
+    "compiled_directory": "vitpose_w8.mlmodelc",
+    "package_bytes": 849219154,
+    "model_spec_sha256": "02fc271895c4248bed46d4495196ec7213a67efa7683cd6a997816deef6c16be",
+    "weights_sha256": "7d15e9022031ae6d7684e434f889f891b727b20bcf75c0ef25a4b435941d3a00"
+  },
+  "W8A8": {
+    "package": "quant/vitpose_w8a8_clipped.mlpackage",
+    "compiled_directory": "vitpose_w8a8_clipped.mlmodelc",
+    "package_bytes": 849443436,
+    "model_spec_sha256": "5aa327982a55282caebb4b4932478b0d2396bb0bedffa31779fa005d32e7ef2e",
+    "weights_sha256": "7d15e9022031ae6d7684e434f889f891b727b20bcf75c0ef25a4b435941d3a00"
+  }
+}
