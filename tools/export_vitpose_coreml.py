@@ -1,6 +1,7 @@
 import os, sys, time, numpy as np, torch
-GEMX = '/Users/anuraag/Developer/GEM-X'
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GEMX = os.environ.get('GEMX_ROOT', os.path.join(os.path.dirname(ROOT), 'GEM-X'))
+os.makedirs(os.path.join(ROOT, "quant"), exist_ok=True)
 os.chdir(GEMX); sys.path.insert(0, GEMX)
 from gem.utils.vitpose_extractor import _build_model_local
 import coremltools as ct

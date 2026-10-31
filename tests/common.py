@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 import numpy as np
 
-GEMX_ROOT = Path(os.environ.get("GEMX_ROOT", "/Users/anuraag/Developer/GEM-X"))
-WORK = Path(os.environ.get("GEMX_WORK", "/Users/anuraag/Developer/GEMX_ONNX"))
+WORK = Path(os.environ.get("GEMX_WORK", str(Path(__file__).resolve().parents[1])))
+GEMX_ROOT = Path(os.environ.get("GEMX_ROOT", str(WORK.parent / "GEM-X")))
 RUNS, QUANT, REPORTS = WORK / "runs", WORK / "quant", WORK / "reports"
 for d in (RUNS, QUANT, REPORTS):
     d.mkdir(parents=True, exist_ok=True)
